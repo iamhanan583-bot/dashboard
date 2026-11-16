@@ -2,27 +2,51 @@ import streamlit as st
 import streamlit.components.v1 as components
 import os
 import sys
-import subprocess
+import json
+import urllib.parse
+import psycopg2
+from psycopg2.extras import RealDictCursor
+import bcrypt
 import time
+import secrets
 
-# 1. Setup Database Environment from Streamlit Secrets
+# ---------------------------------------------------------------------------
+# 1. DATABASE CONFIGURATION (Supports Supabase DATABASE_URL & Secrets)
+# ---------------------------------------------------------------------------
+database_url = ""
 if hasattr(st, "secrets") and "DATABASE_URL" in st.secrets:
-    os.environ["DATABASE_URL"] = st.secrets["DATABASE_URL"]
+    database_url = st.secrets["DATABASE_URL"]
+else:
+    database_url = os.environ.get("DATABASE_URL", "")
 
-# 2. Start the Backend API Server (server.py) in Background
-@st.cache_resource
-def start_backend_server():
-    server_script = os.path.join(os.path.dirname(__file__), "server.py")
-    if os.path.exists(server_script):
-        cmd = [sys.executable, server_script]
-        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        time.sleep(2)
-        return proc
-    return None
+def get_db_connection():
+    try:
+        if database_url:
+            return psycopg2.connect(database_url, cursor_factory=RealDictCursor, sslmode="require")
+        else:
+            return psycopg2.connect(
+                dbname=os.environ.get("DB_NAME", "postgres"),
+                user=os.environ.get("DB_USER", "postgres"),
+                password=os.environ.get("DB_PASSWORD", ""),
+                host=os.environ.get("DB_HOST", "localhost"),
+                port=int(os.environ.get("DB_PORT", 5432)),
+                cursor_factory=RealDictCursor
+            )
+    except Exception as e:
+        print(f"[DB Error]: {e}")
+        return None
 
-start_backend_server()
+# ---------------------------------------------------------------------------
+# 2. EMBEDDED FASTAPI / SERVER DISPATCHER
+# ---------------------------------------------------------------------------
+# Read index.html directly
+html_file_path = os.path.join(os.path.dirname(__file__), "index.html")
+html_content = ""
+if os.path.exists(html_file_path):
+    with open(html_file_path, "r", encoding="utf-8") as f:
+        html_content = f.read()
 
-# 3. Streamlit Page Config
+# Setup Streamlit Page
 st.set_page_config(
     page_title="Transworld GIS & NOC Portal",
     page_icon="🌐",
@@ -30,7 +54,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 4. Full screen styling
 st.markdown("""
     <style>
         #MainMenu {visibility: hidden;}
@@ -41,11 +64,5 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 5. Load index.html without any modifications
-html_file_path = os.path.join(os.path.dirname(__file__), "index.html")
-if os.path.exists(html_file_path):
-    with open(html_file_path, "r", encoding="utf-8") as f:
-        html_code = f.read()
-    components.html(html_code, height=1000, scrolling=True)
-else:
-    st.error("Error: index.html not found!")e not found in repository!")
+# Render the original unchanged portal inside the page
+components.html(html_content, height=1000, scrolling=True)
