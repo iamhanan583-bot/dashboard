@@ -1,11 +1,8 @@
-"""
-Centralized Database & App Configuration
-Loads settings from .env file if present, or falls back to environment variables / defaults.
-"""
 import os
+import urllib.parse
 from pathlib import Path
 
-# Load .env manually without external dependency
+# Load .env if present
 env_path = Path(__file__).resolve().parent / '.env'
 if env_path.exists():
     with open(env_path, 'r', encoding='utf-8') as f:
@@ -19,17 +16,27 @@ if env_path.exists():
             if k not in os.environ:
                 os.environ[k] = v
 
-_db_password = os.environ.get("DB_PASSWORD")
-if not _db_password:
-    raise RuntimeError("DB_PASSWORD is missing. Add DB_PASSWORD=... to the .env file next to server.py.")
+database_url = os.environ.get("DATABASE_URL", "").strip()
 
-DB_CONFIG = {
-    "dbname": os.environ.get("DB_NAME", "transworlddatabase"),
-    "user": os.environ.get("DB_USER", "postgres"),
-    "password": _db_password,
-    "host": os.environ.get("DB_HOST", "localhost"),
-    "port": int(os.environ.get("DB_PORT", 5432))
-}
+if database_url:
+    url = urllib.parse.urlparse(database_url)
+    DB_CONFIG = {
+        "dbname": url.path.lstrip('/') or "postgres",
+        "user": url.username or "postgres",
+        "password": url.password or "",
+        "host": url.hostname or "localhost",
+        "port": int(url.port or 5432),
+        "sslmode": "require"
+    }
+else:
+    DB_CONFIG = {
+        "dbname": os.environ.get("DB_NAME", "postgres"),
+        "user": os.environ.get("DB_USER", "postgres"),
+        "password": os.environ.get("DB_PASSWORD", ""),
+        "host": os.environ.get("DB_HOST", "localhost"),
+        "port": int(os.environ.get("DB_PORT", 5432)),
+        "sslmode": os.environ.get("DB_SSLMODE", "prefer")
+    }
 
 PORT = int(os.environ.get("PORT", 5000))
-ALLOWED_ORIGIN = "http://localhost:5000"
+ALLOWED_ORIGIN = "*"
